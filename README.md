@@ -19,6 +19,17 @@ apps/
 │   └── src/
 │       ├── main.c
 │       └── asm_funcs.S
+├── native_sim_learn/         # native_sim 外设学习示例（无需真实开发板）
+│   ├── CMakeLists.txt
+│   ├── prj.conf
+│   ├── boards/
+│   │   └── native_sim.overlay
+│   └── src/
+│       ├── main.c            # 程序入口
+│       ├── app_led.c/.h      # [1] GPIO 输出：LED
+│       ├── app_button.c/.h   # [2] GPIO 输入 + 中断：按键
+│       ├── app_eeprom.c/.h   # [3] EEPROM 非易失存储
+│       └── app_entropy.c/.h  # [4] 熵源 / 随机数
 ├── .gitignore
 └── README.md
 ```
@@ -33,6 +44,10 @@ cd /home/ubuntu/workspace/zephyrproject
 # QEMU RISC-V 32（需 sudo apt install qemu-system-misc）
 west build -b qemu_riscv32 apps/riscv_asm_learn -d build/build_qemu_riscv32_asm
 west build -d build/build_qemu_riscv32_asm -t run    # 退出：Ctrl-A 然后 X
+
+# native_sim（PC 本机仿真，无需 QEMU / 硬件；需 sudo apt install gcc-multilib libc6-dev-i386）
+west build -b native_sim apps/native_sim_learn -d build/build_native_sim_learn
+./build/build_native_sim_learn/zephyr/zephyr.exe
 ```
 
 ## 说明

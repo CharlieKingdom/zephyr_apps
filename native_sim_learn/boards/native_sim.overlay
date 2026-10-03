@@ -1,0 +1,26 @@
+/*
+ * native_sim 板级设备树覆盖（devicetree overlay）
+ *
+ * 板子自带的 native_sim.dts 已经有 led0（GPIO 输出）。
+ * 这里再增加一个“虚拟按键” sw0，作为 GPIO 输入 + 中断演示的素材：
+ *   - 节点挂在 gpio0 的 pin2 上；
+ *   - 上拉 + 低电平有效（按下 = 低电平），与真实开发板上的用户按键一致；
+ *   - 运行阶段由应用程序调用 gpio_emul_input_set() 注入电平来模拟“按下/松开”。
+ */
+
+#include <zephyr/dt-bindings/gpio/gpio.h>
+
+/ {
+	buttons {
+		compatible = "gpio-keys";
+
+		button0: button_0 {
+			gpios = <&gpio0 2 (GPIO_PULL_UP | GPIO_ACTIVE_LOW)>;
+			label = "Simulated button";
+		};
+	};
+
+	aliases {
+		sw0 = &button0;
+	};
+};
