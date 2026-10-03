@@ -51,7 +51,72 @@ sudo apt-get install -y qemu-system-misc
 
 ## 2. 从 0 开始：编译
 
-一条命令即可（在 `zephyrproject` 目录下执行）：
+### 2.1 一键编译 + 运行：`./make.sh`
+
+本工程自带脚本 `make.sh`，把「切换目录 → 激活环境 → 编译 → 运行」打包成一条命令：
+
+```bash
+cd /home/ubuntu/workspace/zephyrproject/apps/riscv_asm_learn
+./make.sh
+```
+
+脚本全文如下：
+
+```bash
+#!/usr/bin/env bash
+# riscv_asm_learn 编译脚本
+# 用法：./make.sh
+set -euo pipefail
+
+# 切到 west 工作区根目录（本脚本的上上级目录，即 zephyrproject/）
+cd "$(dirname "$(readlink -f "$0")")/../.."
+
+# 激活 Zephyr 的 Python 虚拟环境（保证非交互式执行也能找到 west）
+if [ -f .venv/bin/activate ]; then
+  # shellcheck disable=SC1091
+  source .venv/bin/activate
+fi
+export ZEPHYR_TOOLCHAIN_VARIANT=zephyr
+
+# 编译本 app，输出到 build/build_qemu_riscv32_asm
+# -p always：每次先清空 build 目录再全量重编（无视文件是否改动）
+west build -p always -b qemu_riscv32 apps/riscv_asm_learn -d build/build_qemu_riscv32_asm -t run
+```
+
+逐段说明：
+
+| 片段 | 作用 |
+| --- | --- |
+| `set -euo pipefail` | "出错即停"：任一命令失败、引用未定义变量、管道中任一段失败，脚本都立刻退出，不会带病继续 |
+| `cd "$(dirname "$(readlink -f "$0")")/../.."` | 先定位脚本自身、再切到工作区根 `zephyrproject/`，因此**无论从哪个目录调用**，后面的相对路径都成立 |
+| `source .venv/bin/activate` | 激活 Zephyr 的 Python 虚拟环境，非交互执行（如 IDE 任务）也能找到 `west` 与 SDK |
+| `export ZEPHYR_TOOLCHAIN_VARIANT=zephyr` | 指定使用 Zephyr SDK 工具链 |
+| `west build ...` | 真正的编译命令，逐参数见 2.2 |
+
+### 2.2 编译命令逐参数拆解
+
+脚本的核心是这一行：
+
+```bash
+west build -p always -b qemu_riscv32 apps/riscv_asm_learn \
+           -d build/build_qemu_riscv32_asm -t run
+```
+
+| 参数 | 含义 |
+| --- | --- |
+| `west build` | Zephyr 的构建命令（底层是 CMake + Ninja） |
+| `-p always` | 构建前**清空 build 目录**再全量重编，无视文件是否改动；保证结果干净、可复现 |
+| `-b qemu_riscv32` | **目标板 = qemu_riscv32**，决定用哪套 arch/SoC/DTS/工具链 |
+| `apps/riscv_asm_learn` | 应用源码目录（含 `CMakeLists.txt`、`prj.conf`、`src/`） |
+| `-d build/build_qemu_riscv32_asm` | 输出目录（本项目约定的命名：`build_<板子>_<用途>`） |
+| `-t run` | 构建完成后立即在 QEMU 中运行（详见第 4 节） |
+
+> `-p` 的三种取值：`always`（每次都全量重编）、`auto`（仅在换板/换 app 时清空）、`never`（纯增量，默认）。
+> 想加快日常迭代速度，可把脚本里的 `-p always` 改为 `-p auto`。
+
+### 2.3 手工编译（不用脚本时）
+
+在 `zephyrproject` 目录下手工执行：
 
 ```bash
 cd /home/ubuntu/workspace/zephyrproject
@@ -59,15 +124,6 @@ cd /home/ubuntu/workspace/zephyrproject
 west build -b qemu_riscv32 apps/riscv_asm_learn \
            -d build/build_qemu_riscv32_asm
 ```
-
-逐个参数拆解：
-
-| 参数 | 含义 |
-| --- | --- |
-| `west build` | Zephyr 的构建命令（底层是 CMake + Ninja） |
-| `-b qemu_riscv32` | **目标板 = qemu_riscv32**，决定用哪套 arch/SoC/DTS/工具链 |
-| `apps/riscv_asm_learn` | 应用源码目录（含 `CMakeLists.txt`、`prj.conf`、`src/`） |
-| `-d build/build_qemu_riscv32_asm` | 输出目录（本项目约定的命名：`build_<板子>_<用途>`） |
 
 编译成功后会看到：
 
@@ -171,6 +227,8 @@ qemu-system-riscv32 -nographic -machine virt -bios none -m 256 \
 ---
 
 ## 4. 运行仿真
+
+> `./make.sh` 已经在编译后自动执行运行（内置 `-t run`）。本节用于**只想重新运行、不再编译**，或想了解 QEMU 底层调用的场景。
 
 ### 方式一：用 west（推荐）
 
@@ -373,6 +431,8 @@ $GDB $ELF
 riscv_asm_learn/
 ├── CMakeLists.txt      # 声明把 main.c 与 asm_funcs.S 一起编译
 ├── prj.conf            # Kconfig 配置（串口控制台，板子默认已开）
+├── make.sh             # 一键编译 + 运行脚本（见第 2 节）
+├── .clangd             # 编辑器跳转配置，指向本项目的 compile_commands.json
 ├── README.md           # 本文档
 └── src/
     ├── main.c          # C 调用汇编并打印

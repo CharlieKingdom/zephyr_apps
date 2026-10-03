@@ -1,0 +1,6 @@
+# 本项目的 clangd 配置。
+# CompilationDatabase 指向本项目 build 目录里的 compile_commands.json，
+# 路径相对本文件所在目录。切换/打开本项目源码时，clangd 自动使用它，
+# 无需修改 .vscode/settings.json。
+CompileFlags:
+  CompilationDatabase: ../../build/build_qemu_riscv32_asm
