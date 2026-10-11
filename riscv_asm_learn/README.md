@@ -12,11 +12,11 @@
 ## 目录
 
 1. [前置环境](#1-前置环境)
-2. [从 0 开始：编译](#2-从-0-开始编译)
-3. [Zephyr 是怎么"选中"RISC-V 和 QEMU 的](#3-zephyr-是怎么选中-riscv-和-qemu-的)
+2. [从 0 开始编译](#2-从-0-开始编译)
+3. [Zephyr 如何选中 RISC-V 与 QEMU](#3-zephyr-如何选中-risc-v-与-qemu)
 4. [运行仿真](#4-运行仿真)
 5. [逐行读懂汇编代码](#5-逐行读懂汇编代码)
-6. [进阶：反汇编与 GDB 调试](#6-进阶反汇编与-gdb-调试)
+6. [进阶反汇编与 GDB 调试](#6-进阶反汇编与-gdb-调试)
 7. [常见问题](#7-常见问题)
 
 ---
@@ -49,7 +49,7 @@ sudo apt-get install -y qemu-system-misc
 
 ---
 
-## 2. 从 0 开始：编译
+## 2. 从 0 开始编译
 
 ### 2.1 一键编译 + 运行：`./make.sh`
 
@@ -91,7 +91,7 @@ west build -p always -b qemu_riscv32 apps/riscv_asm_learn -d build/build_qemu_ri
 | `cd "$(dirname "$(readlink -f "$0")")/../.."` | 先定位脚本自身、再切到工作区根 `zephyrproject/`，因此**无论从哪个目录调用**，后面的相对路径都成立 |
 | `source .venv/bin/activate` | 激活 Zephyr 的 Python 虚拟环境，非交互执行（如 IDE 任务）也能找到 `west` 与 SDK |
 | `export ZEPHYR_TOOLCHAIN_VARIANT=zephyr` | 指定使用 Zephyr SDK 工具链 |
-| `west build ...` | 真正的编译命令，逐参数见 2.2 |
+| `west build ...` | 真正的编译命令，逐参数见 [2.2](#22-编译命令逐参数拆解) |
 
 ### 2.2 编译命令逐参数拆解
 
@@ -109,7 +109,7 @@ west build -p always -b qemu_riscv32 apps/riscv_asm_learn \
 | `-b qemu_riscv32` | **目标板 = qemu_riscv32**，决定用哪套 arch/SoC/DTS/工具链 |
 | `apps/riscv_asm_learn` | 应用源码目录（含 `CMakeLists.txt`、`prj.conf`、`src/`） |
 | `-d build/build_qemu_riscv32_asm` | 输出目录（本项目约定的命名：`build_<板子>_<用途>`） |
-| `-t run` | 构建完成后立即在 QEMU 中运行（详见第 4 节） |
+| `-t run` | 构建完成后立即在 QEMU 中运行（详见[第 4 节](#4-运行仿真)） |
 
 > `-p` 的三种取值：`always`（每次都全量重编）、`auto`（仅在换板/换 app 时清空）、`never`（纯增量，默认）。
 > 想加快日常迭代速度，可把脚本里的 `-p always` 改为 `-p auto`。
@@ -150,7 +150,7 @@ file build/build_qemu_riscv32_asm/zephyr/zephyr.elf
 
 ---
 
-## 3. Zephyr 是怎么"选中"RISC-V 和 QEMU 的
+## 3. Zephyr 如何选中 RISC-V 与 QEMU
 
 这部分讲原理，理解了以后你能自己移植到别的板子。
 
@@ -167,10 +167,11 @@ file build/build_qemu_riscv32_asm/zephyr/zephyr.elf
 
 ### 3.2 arch 怎么定为 riscv
 
-`arch: riscv` → Zephyr 载入 [zephyr/arch/riscv](file:///home/ubuntu/workspace/zephyrproject/zephyr/arch/riscv)，
+`arch: riscv` → Zephyr 载入
+[arch/riscv](https://github.com/zephyrproject-rtos/zephyr/tree/v4.1.0/arch/riscv)（上游 v4.1.0，本地工作区同路径），
 用 RISC-V 的启动代码（`reset.S`、trap 处理、`switch.S` 上下文切换等）。
 
-### 3.3 SoC / DTS：CPU 与内存长什么样
+### 3.3 SoC 与 DTS CPU 和内存长什么样
 
 `qemu_riscv32.dts` 引入 `virt-riscv32.dtsi`，里面有：
 
@@ -201,7 +202,8 @@ grep -o 'mabi=[^ ]*'  build/build_qemu_riscv32_asm/compile_commands.json | head 
 
 ### 3.5 QEMU 参数从哪来
 
-看 [board.cmake](file:///home/ubuntu/workspace/zephyrproject/zephyr/boards/qemu/riscv32/board.cmake)：
+看
+[board.cmake](https://github.com/zephyrproject-rtos/zephyr/blob/v4.1.0/boards/qemu/riscv32/board.cmake)（上游 v4.1.0，本地工作区同路径）：
 
 ```cmake
 set(QEMU_binary_suffix riscv32)          # → 用 qemu-system-riscv32
@@ -264,103 +266,404 @@ ELF=build/build_qemu_riscv32_asm/zephyr/zephyr.elf
 $QEMU -nographic -machine virt -bios none -m 256 -kernel $ELF
 ```
 
-两者完全等价，方式二能让你看清 QEMU 到底接收了哪些参数。
+两者完全等价，方式二能让你看清 QEMU 到底接收了哪些参数，
+参数的来源逐条见 [3.5 QEMU 参数从哪来](#35-qemu-参数从哪来)。
 
 ---
 
 ## 5. 逐行读懂汇编代码
 
-代码在 [src/asm_funcs.S](file:///home/ubuntu/workspace/zephyrproject/apps/riscv_asm_learn/src/asm_funcs.S)，
-C 侧调用在 [src/main.c](file:///home/ubuntu/workspace/zephyrproject/apps/riscv_asm_learn/src/main.c)。
+代码在 [src/asm_funcs.S](src/asm_funcs.S)（5 个汇编函数），C 侧调用在 [src/main.c](src/main.c)。
 
-### 5.1 先记住 RISC-V 的调用约定（ilp32 ABI）
+本章假设你对 RISC-V 和汇编**一窍不通**：先在 5.1/5.2 建立两块基石（一行汇编怎么读、寄存器怎么分工），
+然后 5 个函数按"由易到难"逐个精讲——每条指令都回答两个问题：**它做了什么？为什么需要它？**
+最后 5.7 给出练习和"C ↔ 汇编"翻译词典。所有结论都能用
+[6.1 反汇编](#61-查看反汇编) 和 [6.2 GDB 单步](#62-用-gdb-单步调试) 亲手验证。
 
-| 寄存器 | 别名 | 用途 |
+本章小节：
+
+- [5.1 开始之前 三个最基本的概念](#51-开始之前-三个最基本的概念)
+- [5.2 RISC-V 的调用约定 ilp32](#52-risc-v-的调用约定-ilp32)
+- [5.3 asm_add 与 asm_sub 第一段汇编](#53-asm_add-与-asm_sub-第一段汇编)
+- [5.4 asm_mul 与 M 扩展](#54-asm_mul-与-m-扩展)
+- [5.5 asm_sum_to 循环与分支](#55-asm_sum_to-循环与分支)
+- [5.6 asm_factorial 递归与栈帧](#56-asm_factorial-递归与栈帧)
+- [5.7 动手练习与翻译词典](#57-动手练习与翻译词典)
+
+### 5.1 开始之前 三个最基本的概念
+
+**概念一：汇编 = 机器码的"人类可读写法"。**
+
+CPU 是纯二进制动物，它唯一看得懂的是 0/1。把每条机器码换成一个好记的名字（助记符），
+就是汇编。对应关系（以加法为例）：
+
+| 层次 | 谁写 | 长什么样 |
 | --- | --- | --- |
-| `x10`–`x17` | `a0`–`a7` | 函数**参数**；`a0`/`a1` 兼作**返回值** |
-| `x1` | `ra` | 返回地址（`ret` 靠它跳回） |
-| `x2` | `sp` | 栈指针 |
-| `x5`–`x7`,`x28`–`x31` | `t0`–`t6` | 临时寄存器（**调用者保存**，可随便用） |
-| `x8`,`x9`,`x18`–`x27` | `s0`–`s11` | 被调用者保存（用了必须自己恢复） |
-| `x0` | `zero` | 恒为 0（写它等于丢弃） |
+| C 语言 | 人 | `return a + b;` |
+| 汇编 | 人写、汇编器翻译 | `add a0, a0, a1` |
+| 机器码 | CPU 执行 | 一串 0/1（见下） |
 
-口诀：**参数进 a，返回出 a，临时用 t，长期用 s，返回地址存 ra。**
+一行汇编 ≈ 一条 CPU 指令 ≈ CPU 的一个基本动作；C 的一行通常被编译器翻成一行或多行汇编。
 
-### 5.2 最简单：`asm_add`（算术指令）
+`add a0, a0, a1` 的 32 位"真身"，按 RISC-V 的 R 型格式切开（看懂这一格，指令编码的骨架就有了）：
 
-```asm
-asm_add:
-    add a0, a0, a1   # a0 = a0 + a1
-    ret              # 返回
+```
+ funct7     rs2      rs1    funct3    rd      opcode
+┌────────┬────────┬────────┬───────┬────────┬─────────┐
+│0000000 │  01011 │  01010 │  000  │  01010 │ 0110011 │ → add a0, a0, a1
+└────────┴────────┴────────┴───────┴────────┴─────────┘
+  "是加法"   x11      x10      加     x10     "寄存器-
+             =a1      =a0             =a0     寄存器运算"
 ```
 
-C 调用 `asm_add(12, 5)` 时：`a0=12, a1=5` → 执行后 `a0=17` → `ret` 把 17 带回 C。
+- 每段 5 位正好能编码 32 个寄存器之一（2^5 = 32）；
+- 汇编器干的活，本质就是"助记符 → 这串 0/1"的查表翻译；
+- 小知识：本工程 ELF 里实际存的是它的 **16 位压缩版 `c.add`**（因为 `-march` 带 `c` 扩展，
+  见 [3.4](#34-工具链怎么选成-risc-v-交叉编译器)），两种编码 CPU 都认识，效果相同——
+  亲眼所见请看 [6.1 反汇编](#61-查看反汇编)。
 
-### 5.3 `asm_mul`：需要 M 扩展
+**概念二：寄存器 = CPU 自带的高速"小抽屉"。**
+
+内存（RAM）容量大但离运算器远；CPU 做任何加减比较，都要先把数据搬进自己内部的
+超高速存储格——寄存器。RV32 有 **32 个**寄存器，每个恰好放一个 32 位整数。
+本 demo 的所有运算都发生在寄存器之间（只有 factorial 用到了内存——栈）。
+
+寄存器有两套名字：编号名 `x0`–`x31`，和别名 `zero/ra/sp/a0/t0/s0...`。
+日常写代码用**别名**，因为别名自带"用途说明书"（见 [5.2](#52-risc-v-的调用约定-ilp32)）。
+
+**概念三：一行汇编怎么读——目标寄存器写在最前面。**
+
+```
+add     a0, a0, a1
+┬┘     ┬┘   ┬┘  ┬┘
+操作码  目标  源1  源2
+```
+
+读作：`a0 = a0 + a1`。**结果永远写进第一个操作数**，后面的是输入。
+这条规则覆盖 RISC-V 几乎所有运算指令，记住它你就能读懂 80% 的汇编。
+（查资料时注意：x86 的 AT&T 语法恰好相反，目标在最后，别串了。）
+
+另外有两种"行"**不是指令**，要区分开：
+
+| 长相 | 例子 | 是什么 |
+| --- | --- | --- |
+| `名字:` | `asm_add:` | 标签：给"当前位置"起名，本身**不产生任何代码**，跳转/调用靠它定位 |
+| `.` 开头 | `.globl asm_add` | 汇编指示符：写给汇编器看的排版命令，**不会变成机器码** |
+
+本工程用到的全部指示符一览：
+
+| 指示符 | 作用 | 通俗解释 |
+| --- | --- | --- |
+| `.section .text` | 之后的代码归入 .text 段 | "把我放进代码区"，链接时会被排进 RAM 的代码区 |
+| `.globl asm_add` | 导出符号 | "我的名字要公开"，C 那边才能链接到我；缺了它链接报 undefined reference |
+| `.type asm_add, @function` | 标记符号类型 | 给调试器/反汇编器看的元信息 |
+| `.size asm_add, .-asm_add` | 记录函数长度 | `.` = 当前位置，减去起点即大小 |
+
+最后一个术语：**伪指令**。有些写法看起来是指令，但 CPU 里**根本不存在**，
+是汇编器送你的便利写法，汇编时自动替换成真指令——`ret`、`li`、`mv`、`j`、`bgt`、`call` 全是。
+它们的"真身"对照表见 [5.5](#55-asm_sum_to-循环与分支)，别急。
+
+### 5.2 RISC-V 的调用约定 ilp32
+
+**调用约定（Calling Convention，本工程用 ilp32 ABI）= C 编译器与汇编函数之间的"合同"**，
+写明：参数放哪、返回值放哪、寄存器坏了算谁的。两边都按合同办事，C 和汇编才能互调。
+
+RV32 全部 32 个寄存器的分工（**本节是查表区，后面忘了随时翻回来**）：
+
+| 寄存器 | 别名 | 名字含义 | 保存责任 | 本 demo 中的角色 |
+| --- | --- | --- | --- | --- |
+| x0 | zero | 恒零 | 读永远得 0，写等于丢弃 | `li` 借它"加出"常数 |
+| x1 | ra | return address | 要 call 别人的函数自己保（call 会覆盖它） | [5.6](#56-asm_factorial-递归与栈帧) 的主角 |
+| x2 | sp | stack pointer | 函数进出必须"栈平衡" | 开帧/回收栈 |
+| x3 / x4 | gp / tp | 全局/线程指针 | 内核与链接器管理 | demo 不碰 |
+| x5–x7, x28–x31 | t0–t6 | temporary 临时 | **调用者**：call 后视为已作废 | acc、i、临时值 |
+| x8–x9, x18–x27 | s0–s11 | saved 长期 | **被调用者**：用了必须原样奉还 | demo 未用 |
+| x10–x17 | a0–a7 | argument 参数 | 调用者 | a0=第1参/返回值，a1=第2参 |
+
+- **调用者保存**（t 系、a 系）：你可以随便用，但别指望 call 完它还在；
+- **被调用者保存**（s 系）：函数可以先存后用，但退出前必须恢复原值；
+- 所以"跨函数调用还想要的值"放 s 系或栈上，"用完就丢的中间值"放 t 系。
+
+`asm_add(12, 5)` 的完整"合同履行"过程：
+
+```
+ C 编译器（甲方）                          汇编函数（乙方）
+──────────────────────────              ──────────────────────────
+1. 把 12 放进 a0，把 5 放进 a1
+2. 执行 call asm_add
+   （call 顺手把"返回地址"写进 ra）  ──→   3. 按合同：第1个参数在 a0，
+                                              第2个参数在 a1
+                                         4. 干活：a0 = a0 + a1
+                                         5. 按合同：结果留在 a0
+                                         6. ret：跳回 ra 记录的地址
+←──────────────────────────
+7. C 从 a0 取回返回值，继续生活
+```
+
+口诀：**参数进 a，返回出 a，临时用 t，长期用 s，返回地址存 ra，栈的进出靠 sp。**
+
+这些规定从哪来？`-mabi=ilp32` 一个字母组正好对应（i=32 位 int，l=32 位 long，p=32 位指针），
+即 32 位软浮点 ABI，见 [3.4](#34-工具链怎么选成-risc-v-交叉编译器)。
+
+### 5.3 asm_add 与 asm_sub 第一段汇编
+
+两个函数的完整源码（含所有"排版"行），先看 asm_add：
 
 ```asm
+	.globl asm_add          /* 指示符：导出函数名，C 才能链接到 */
+	.type  asm_add, @function
+asm_add:                    /* 标签：函数入口地址的名字 */
+	add     a0, a0, a1      /* 真指令：a0 = a0 + a1 */
+	ret                     /* 伪指令：返回调用者 */
+	.size  asm_add, .-asm_add
+```
+
+逐行拆解：
+
+| 行 | 读法 / 作用 |
+| --- | --- |
+| `.globl` `.type` | 见 [5.1 指示符表](#51-开始之前-三个最基本的概念)，纯元信息 |
+| `asm_add:` | 标签 = 函数第一行代码的位置。C 里写 `asm_add(12,5)`，链接器把这个名字解析成地址（0x80000174，见 [6.1](#61-查看反汇编)） |
+| `add a0, a0, a1` | 目标在前：a0 = a0 + a1 |
+| `ret` | 伪指令，真身是 `jalr x0, 0(ra)`：**跳到 ra 保存的地址**。目标写 x0 = 把返回地址丢弃（普通返回不嵌套） |
+
+寄存器级追踪（`asm_add(12, 5)`）：
+
+| 时刻 | a0 | a1 | 说明 |
+| --- | --- | --- | --- |
+| 调用前（C 已按合同放好） | 12 | 5 | 参数就位 |
+| `add` 执行后 | **17** | 5 | 结果写回 a0 |
+| `ret` 执行后 | 17 | 5 | a0 原样带回，这就是返回值 |
+
+为什么这个函数**不需要栈**？它没调用任何别的函数（行话叫"叶子函数"，leaf function），
+ra 天然安全；没用 s 系寄存器；也没有放不下的局部变量。一条运算 + 一个返回，干净利落。
+
+`asm_sub` 完全同理，把加换成减：`sub a0, a0, a1` → a0 = 12 − 5 = 7。
+
+### 5.4 asm_mul 与 M 扩展
+
+```asm
+	.globl asm_mul
+	.type  asm_mul, @function
 asm_mul:
-    mul a0, a0, a1   # a0 = a0 * a1
-    ret
+	mul     a0, a0, a1      /* a0 = a0 * a1（低 32 位）*/
+	ret
+	.size  asm_mul, .-asm_mul
 ```
 
-`mul` 属于 **M 扩展**（乘除法）。基础 RV32I 是没有乘法的——这正是 `-march` 里那个 `m` 的意义。
-如果把 `-march` 换成 `rv32i`，这条 `mul` 会编译失败。
+重点不在指令（用法与 add 一模一样），而在它背后的**指令集经济学**：
 
-### 5.4 `asm_sum_to`：循环与分支
+- RISC-V 的基础指令集 **RV32I 只有 40 多条**：加减、逻辑、访存、分支……**没有乘除法**
+  （早期硬件省面积；许多乘法可用移位+加法凑）。想要 `mul/div/rem`，硬件必须实现 **M 扩展**；
+- 本工程 `-march=rv32imac_zicsr_zifencei` 里那个 `m` 就是它（这个字符串怎么来的见
+  [3.4](#34-工具链怎么选成-risc-v-交叉编译器)）。QEMU 按 ISA 字符串模拟，自然支持；
+- 动手试：把 march 换成 `rv32i` 重新编译，这条 `mul` 会直接汇编报错——指令"有没有"由扩展集决定；
+- "低 32 位"：12 × 5 = 60 没超；但 100000 × 100000 = 10^10 超过 2^32，RV32 的 `mul` 只保留低 32 位
+  （要高位得用 `mulh`，M 扩展的进阶货）。
+
+### 5.5 asm_sum_to 循环与分支
+
+目标：计算 1+2+…+n。这是第一次让 CPU"转圈"——循环。
 
 ```asm
-asm_sum_to:                 # 计算 1+2+...+n
-    li   t0, 0              # acc = 0
-    li   t1, 1              # i   = 1
+	.globl asm_sum_to
+	.type  asm_sum_to, @function
+asm_sum_to:
+	li      t0, 0           /* acc = 0（累加和）*/
+	li      t1, 1           /* i   = 1（计数器）*/
 .Lsum_loop:
-    bgt  t1, a0, .Lsum_done # if (i > n) goto done
-    add  t0, t0, t1         # acc += i
-    addi t1, t1, 1          # i++
-    j    .Lsum_loop         # goto loop
+	bgt     t1, a0, .Lsum_done   /* if (i > n) 跳出循环 */
+	add     t0, t0, t1      /* acc += i */
+	addi    t1, t1, 1       /* i++      */
+	j       .Lsum_loop      /* 无条件跳回循环开头 */
 .Lsum_done:
-    mv   a0, t0             # 返回值 = acc
-    ret
+	mv      a0, t0          /* 返回值 = acc */
+	ret
+	.size  asm_sum_to, .-asm_sum_to
 ```
 
-要点：
-- `li` 是**伪指令**（load immediate），汇编器会按立即数大小展开成 `addi` 或 `lui/addi`。
-- `.L` 开头的标签是**局部标签**，不进入符号表。
-- 分支指令 `bgt`（greater than）、`beq`、`bne`、`blt`、`ble`、`bge` 等，是 RISC-V 唯一的条件跳转。
+新面孔逐条精讲。左列是"你写的"，右列是**汇编器替换后 CPU 实际执行的真身**——
+这张表同时是 [5.1](#51-开始之前-三个最基本的概念) 里说的伪指令对照表：
 
-### 5.5 `asm_factorial`：递归与栈帧
+| 你写的 | 真身（CPU 执行的） | 一句话解释 |
+| --- | --- | --- |
+| `li t0, 0` | `addi t0, zero, 0` | load immediate：装常数。小常数一条 `addi`（借 zero"加"出来）；大常数（装不进 12 位）则 `lui`+`addi` 两条。开了 C 扩展时常是 2 字节的 `c.li` |
+| `bgt t1, a0, 标签` | `blt a0, t1, 标签` | branch if greater than：i > n 就跳。CPU 硬件只有 `beq/bne/blt/bge/bltu/bgeu` 六种比较方向，`bgt` 是汇编器把两个操作数**对调**实现的 |
+| `add t0, t0, t1` | 真指令（就是它自己） | acc += i，寄存器加法 |
+| `addi t1, t1, 1` | 真指令 | add immediate：i++。常数直接编进指令里，不用先装寄存器。立即数是 **12 位有符号**（−2048~2047），够 i++ 用 |
+| `j .Lsum_loop` | `jal x0, 偏移` | 无条件跳转。目的地写标签，汇编器自己算距离；目标写 x0 = 不留返回地址 |
+| `mv a0, t0` | `addi a0, t0, 0` | move：a0 = t0，本质是"加 0" |
+
+逐轮执行追踪（`asm_sum_to(10)`，进入时 a0=10）——循环是汇编最值得"人肉跑一遍"的地方：
+
+| 轮次 | 进入循环时 t1 (i) | 本轮 bgt 判断 (i>10?) | 本轮 t0 变化 | 本轮结束时 t0 |
+| --- | --- | --- | --- | --- |
+| 1 | 1 | 否，继续 | 0 + 1 | 1 |
+| 2 | 2 | 否 | 1 + 2 | 3 |
+| 3 | 3 | 否 | 3 + 3 | 6 |
+| … | … | … | … | … |
+| 10 | 10 | 否 | 45 + 10 | 55 |
+| 11 | 11 | **是 → 跳到 .Lsum_done** | 不执行 | 55 |
+
+随后 `mv a0, t0`（a0=55）→ `ret`，C 拿到 55。C 里最普通的 `for` 循环，
+在 CPU 眼里就是"**比较 → 跳转**"这两板斧的往复。
+
+两个细节：
+
+- `.L` 开头的标签是**局部标签**（GNU as 约定）：不进符号表、不污染全局命名空间、可重名。
+  循环/分支的目标几乎都写它；
+- 为什么 t0/t1 用完不保存？合同：t 系=调用者保存=大家默认"它随时会坏"。
+  本函数没 call 别人，所以其实安全；但**跨 call 还想要的值，别放 t 系**——这是习惯问题。
+
+### 5.6 asm_factorial 递归与栈帧
+
+最难也最精彩的一课：用汇编实现递归（调用自己）。先补两块背景知识。
+
+**背景一：栈是什么？**
+
+- 栈 = RAM 里划出的"暂存区"，特点是**后进先出**（像叠盘子）；
+- `sp` 永远指向栈顶（当前空位）；
+- RISC-V 约定栈向**低地址**生长：存东西前先把 sp 减小（腾地方），取完再加回去（还地方）；
+- 每个线程有自己的栈（Zephyr 切换线程时换 sp），本 demo 里 main 的栈由内核启动时安排好。
+
+**背景二：为什么必须保存 ra？**
+
+- `call` 每次执行都会把"返回地址"写进 ra——而 **ra 只有一个**；
+- `factorial(3)` 递归调用 `factorial(2)` 时，第二次 call 会**覆盖**第一次的 ra；
+- 如果不保存，最深一层返回后，外层全部"失忆"，跳去错误地址——症状是程序跑飞/无声挂死，极难排查；
+- 结论：**只要函数还会 call 别人（非叶子函数），进门第一件事就是把 ra 押到栈上**。
+
+本函数的"账本"——栈帧布局（一次开 8 字节，装两样东西）：
+
+```
+        地址增大 ↑
+        ┌──────────────────────┐
+        │      更早的栈内容       │
+        ├──────────────────────┤ ← 开帧前的 sp（= 回收后的 sp）
+        │ ra（4 字节）返回地址    │ ← sw ra, 4(sp)
+        │ n （4 字节）当前参数    │ ← sw a0, 0(sp)
+        └──────────────────────┘ ← 开帧后的 sp（addi sp, sp, -8 之后）
+        地址减小 ↓（栈向下生长）
+```
+
+完整源码与逐行注释：
 
 ```asm
-asm_factorial:               # n!
-    li   t0, 1
-    ble  a0, t0, .Lfac_base  # if (n <= 1) return 1
+	.globl asm_factorial
+	.type  asm_factorial, @function
+asm_factorial:
+	li      t0, 1
+	ble     a0, t0, .Lfac_base   /* if (n <= 1) 直接返回 1 —— 递归出口 */
 
-    addi sp, sp, -8          # 开栈帧（8 字节）
-    sw   ra, 4(sp)           # 保存返回地址（递归会覆盖 ra！）
-    sw   a0, 0(sp)           # 保存当前 n
+	addi    sp, sp, -8      /* 开 8 字节栈帧：ra 和 n 各占 4 字节 */
+	sw      ra, 4(sp)       /* store word：把 ra 存到内存地址 sp+4 */
+	sw      a0, 0(sp)       /* 把当前 n 存到内存地址 sp+0 */
 
-    addi a0, a0, -1          # a0 = n-1
-    call asm_factorial       # 递归；返回时 a0 = (n-1)!
+	addi    a0, a0, -1      /* a0 = n-1：为下一层准备参数 */
+	call    asm_factorial   /* 递归！返回时 a0 = (n-1)!（同时 ra 被覆盖）*/
 
-    lw   t1, 0(sp)           # 恢复 n
-    lw   ra, 4(sp)           # 恢复 ra
-    addi sp, sp, 8           # 回收栈帧
+	lw      t1, 0(sp)       /* load word：从 sp+0 取回本层的 n */
+	lw      ra, 4(sp)       /* 从 sp+4 取回本层的返回地址 */
+	addi    sp, sp, 8       /* 回收栈帧：sp 必须还回原位（栈平衡！）*/
 
-    mul  a0, a0, t1          # a0 = (n-1)! * n
-    ret
+	mul     a0, a0, t1      /* a0 = (n-1)! × n */
+	ret                     /* 用恢复过的 ra 回家 */
 .Lfac_base:
-    li   a0, 1
-    ret
+	li      a0, 1           /* 0! = 1! = 1（叶子分支：不开帧）*/
+	ret
+	.size  asm_factorial, .-asm_factorial
 ```
 
-**为什么必须保存 `ra`**：`call` 会把返回地址写进 `ra`。递归调用会覆盖它，
-所以每一层必须先把 `ra` 压栈。这是理解"函数调用如何工作"最典型的一课。
+新指令只有两条访存指令，语法是 `偏移(基址寄存器)`：
+
+| 指令 | 方向 | 作用 |
+| --- | --- | --- |
+| `sw rs, 偏移(sp)` | 寄存器 → 内存 | store word：把 rs 的 32 位存进地址 `sp+偏移`。偏移是 12 位有符号（±2048），所以栈帧一大就得先动 sp 本身 |
+| `lw rd, 偏移(sp)` | 内存 → 寄存器 | load word：从 `sp+偏移` 读 32 位装进 rd。`sw`/`lw` 是 RISC-V 读写内存的基本手段 |
+
+`factorial(3)` 全过程推演（建议之后用 [6.2 GDB](#62-用-gdb-单步调试) 单步亲自走一遍）：
+
+**下潜阶段**（每层开帧、ra 越押越多）：
+
+| 时刻 | sp 相对位置 | 本帧栈上押着的东西 | a0 | ra 当前指向 |
+| --- | --- | --- | --- | --- |
+| main 执行 `call fac(3)` | — | — | 3 | → main 中 call 的下一行 |
+| fac(3) 进门，开帧 | sp₁ | `[n=3][ra→main]` | 3 | 仍指向 main（**正被 sw 押进栈**） |
+| fac(3) 执行 `call fac(2)` | sp₁ | 同上 | 2 | → fac(3) 内 call 的下一行（**ra 被覆盖！**） |
+| fac(2) 进门，开帧 | sp₂（=sp₁−8） | `[n=2][ra→fac(3)内]` | 2 | 仍指向 fac(3) 内（正被押进栈） |
+| fac(2) 执行 `call fac(1)` | sp₂ | 同上 | 1 | → fac(2) 内 call 的下一行（ra 再次被覆盖） |
+| fac(1) 进门，命中出口 | **不开帧** | 栈保持 sp₂ | 1 | fac(2) 内 call 的下一行（未被覆盖，直接可用） |
+
+最深时刻的栈全景：
+
+```
+        ┌───────────────────────────┐
+ sp₁ →  │ fac(3) 的帧： n=3 │ ra→main │   ← 还押着
+        ├───────────────────────────┤
+ sp₂ →  │ fac(2) 的帧： n=2 │ ra→fac(3)│  ← 还押着
+        ├───────────────────────────┤
+        │   fac(1) 是出口，没开帧      │   ← 正在执行 li a0,1; ret
+        └───────────────────────────┘
+```
+
+**回升阶段**（逐层取回、相乘、还栈）：
+
+1. `fac(1)` ret → 回到 `fac(2)` 中 call 的下一行，a0=1（即 1!）；
+2. `fac(2)`：`lw t1` 取回 n=2，`lw ra` 取回自己押的返回地址，`mul` 得 a0 = 1×2 = 2，
+   `sp += 8` 还帧，ret → 回到 `fac(3)`；
+3. `fac(3)` 同法：a0 = 2×3 = 6，ret 回 main。
+
+答案 3! = 6；`main.c` 实际调用 `asm_factorial(6)` = 720——同一套流程走 6 层而已。
+
+自查清单（改这个函数练习时对照）：
+
+- 忘了 `sw ra` → 递归一深 ra 就被覆盖，返回时跑飞（**新手第一大坑**）；
+- `sw ra` 和 `lw ra` 的偏移不一致 → 取回的是垃圾；
+- `-8` 和 `+8` 不配对 → 栈不平衡，上层全部错位；
+- 先 `mul` 后 `lw`（顺序反了）→ 用的是下一层的数据。
+
+### 5.7 动手练习与翻译词典
+
+**练习（由浅入深，改完直接 `./make.sh` 看结果）：**
+
+1. 写 `asm_max(int a, int b)` 返回较大值。提示：`blt a0, a1, 标签` + `mv`；
+   在 main.c 加 `extern int asm_max(int, int);` 和一行 printk 验证；
+2. 把 `asm_sum_to` 改成只加偶数（`addi t1, t1, 2`？初始值该是多少？）；
+3. 用 [6.2 GDB](#62-用-gdb-单步调试) 断在 `asm_factorial`，`stepi` 单步走一遍
+   [5.6](#56-asm_factorial-递归与栈帧) 的推演，用 `info registers sp ra a0` 亲眼看栈的下潜与回升。
+
+**C ↔ 汇编"翻译词典"**（写新函数时按需查）：
+
+| 你想表达的 C | 汇编写法 | 本 demo 的例子 |
+| --- | --- | --- |
+| `return a + b;` | `add` | asm_add |
+| `return a - b;` | `sub` | asm_sub |
+| `return a * b;` | `mul`（要 M 扩展） | asm_mul |
+| `int x = 常数;` | `li x, 常数`（伪指令） | `li t0, 0` |
+| `x++` | `addi x, x, 1` | `addi t1, t1, 1` |
+| `if (a > b) …` | `bgt`/`bge`/`beq`/`bne`… | `bgt t1, a0, .Lsum_done` |
+| `if (n <= 1) …` | `ble`（伪指令，= bge 反向） | `ble a0, t0, .Lfac_base` |
+| `goto 标签` / 循环回边 | `j 标签`（伪指令） | `j .Lsum_loop` |
+| 调用函数 | `call 名字`（= `jal ra, …`） | `call asm_factorial` |
+| 函数返回 | `ret`（= `jalr x0, 0(ra)`） | 各函数末尾 |
+| `return x;` | `mv a0, x` + `ret` | `mv a0, t0` |
+| 局部变量 | 优先放寄存器（t/s 系）；要跨 call 或放不下 → 栈 | t0/t1 与栈上的 n |
+| 保存/恢复现场 | `sw`/`lw` 配 `sp` 开帧回收 | factorial 全套 |
+
+**延伸阅读**（出圈后的两步）：
+
+- [RISC-V 指令集官方手册](https://github.com/riscv/riscv-isa-manual)（免费）：
+  所有指令的"字典"，RV32I 全部指令一页可查，伪指令清单在卷一附录 A；
+- [Zephyr 上游 arch/riscv](https://github.com/zephyrproject-rtos/zephyr/tree/v4.1.0/arch/riscv)：
+  看内核怎么用同样的指令写启动与上下文切换（`reset.S`、`switch.S`）。
 
 ---
 
-## 6. 进阶：反汇编与 GDB 调试
+## 6. 进阶反汇编与 GDB 调试
 
-### 6.1 看反汇编（把指令和机器码对上）
+### 6.1 查看反汇编
+
+把[第 5 章](#5-逐行读懂汇编代码)的每条指令与真实机器码对上——亲眼验证"伪指令"的存在：
 
 ```bash
 OBJDUMP=$HOME/zephyr-sdk-0.17.0/riscv64-zephyr-elf/bin/riscv64-zephyr-elf-objdump
@@ -378,10 +681,18 @@ $OBJDUMP -d --disassemble=asm_factorial $ELF   # 只看某个函数
 80000176:  8082      ret
 ```
 
-左边是地址和机器码，右边是助记符。`ret` 的机器码 `0x8082` 其实就是
-`jalr x0, 0(ra)` 的压缩编码——印证了 ret 是伪指令。
+左边是地址和机器码，右边是助记符。两个观察：
 
-### 6.2 用 GDB 单步调试（观察寄存器变化）
+- `add` 只占 **2 字节**（0x952e）而非 4 字节——因为 `-march` 带 C 扩展，
+  存的是压缩指令 `c.add`（编码怎么读见 [5.1](#51-开始之前-三个最基本的概念)，扩展集见
+  [3.4](#34-工具链怎么选成-risc-v-交叉编译器)）；RAM 基址 0x80000000 的由来见
+  [3.3](#33-soc-与-dts-cpu-和内存长什么样)（asm_add 的地址 = 基址 + 前面启动段的大小偏移）；
+- `ret` 的机器码 `0x8082` 是压缩指令 `c.jr ra`，语义等于 `jalr x0, 0(ra)`——
+  CPU 里根本没有"ret"，印证了它是伪指令。
+
+### 6.2 用 GDB 单步调试
+
+单步走一遍 [5.6 factorial 的推演](#56-asm_factorial-递归与栈帧)，是理解栈帧最快的路。
 
 终端 A：启动 QEMU 并**暂停等待调试器**（`-s` 开 gdbstub 端口 1234，`-S` 启动即暂停）：
 
@@ -439,10 +750,15 @@ riscv_asm_learn/
     └── asm_funcs.S     # 5 个汇编函数
 ```
 
-建议学习顺序（由浅入深）：
+建议学习顺序（由浅入深，均链接到[第 5 章](#5-逐行读懂汇编代码)对应小节）：
 
-1. **寄存器与 ABI** → 看 `asm_add`，理解 `a0/a1` 和返回值
-2. **算术指令** → `asm_sub`（`sub`）、`asm_mul`（`mul` + M 扩展）
-3. **控制流** → `asm_sum_to`（`li/add/bgt/j` 循环）
-4. **函数调用与栈** → `asm_factorial`（`call/ret`、`sw/lw`、栈帧、保存 `ra`）
+1. **寄存器与 ABI** → 先看 [5.2 调用约定](#52-risc-v-的调用约定-ilp32)，
+   再看 [asm_add](#53-asm_add-与-asm_sub-第一段汇编)，理解 `a0/a1` 和返回值
+2. **算术指令** → [asm_sub](#53-asm_add-与-asm_sub-第一段汇编)（`sub`）、
+   [asm_mul](#54-asm_mul-与-m-扩展)（`mul` + M 扩展）
+3. **控制流** → [asm_sum_to](#55-asm_sum_to-循环与分支)（`li/add/bgt/j` 循环）
+4. **函数调用与栈** → [asm_factorial](#56-asm_factorial-递归与栈帧)
+   （`call/ret`、`sw/lw`、栈帧、保存 `ra`）
 5. **验证理解** → 自己加一个 `asm_max(int a, int b)` 返回较大值，编译并在 QEMU 里运行
+   （练习见 [5.7](#57-动手练习与翻译词典)）
+
