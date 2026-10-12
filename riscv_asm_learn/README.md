@@ -704,9 +704,16 @@ $QEMU -nographic -machine virt -bios none -m 256 -s -S -kernel $ELF
 
 终端 B：连上去调试：
 
+> **注意**：shell 变量**只在定义它的那个终端里有效**——终端 A 里定义的
+> `QEMU`/`ELF` 在终端 B 里不存在，所以这里必须**重新定义** `ELF`
+> （GDB 依靠它加载符号表；漏掉它启动时会警告
+> `No executable has been specified`，`break` 会报
+> `No symbol table is loaded`）。
+
 ```bash
 GDB=$HOME/zephyr-sdk-0.17.0/riscv64-zephyr-elf/bin/riscv64-zephyr-elf-gdb
-$GDB $ELF
+ELF=$HOME/workspace/zephyrproject/build/build_qemu_riscv32_asm/zephyr/zephyr.elf
+$GDB $ELF                    # 启动时加载符号表（少了 $ELF 就是"裸连"）
 (gdb) target remote :1234
 (gdb) break asm_add          # 在汇编函数上设断点
 (gdb) continue
@@ -716,10 +723,20 @@ $GDB $ELF
 (gdb) x/4i $pc               # 反汇编接下来的指令
 ```
 
+> 连接后若停在 `0x00001000 in ?? ()`：这是 QEMU `virt` 机器的复位入口
+> （QEMU 内置 ROM，跳一段后才到 ELF 入口 `0x80000000`），属正常现象，
+> `continue` 即可。若 `break` 时被问
+> `Make breakpoint pending on future shared library load?`，答 **n**
+> （裸机静态程序没有共享库可等，答 y 断点永远不会生效）。
+
 想练习什么，就把断点打在哪个函数上，用 `stepi` 一条条走，配合 `info registers` 观察变化。
 
-> 也可以用 `west build -d build/build_qemu_riscv32_asm -t debug`，
-> Zephyr 会按板子的 `board.cmake` 自动起 QEMU + gdb。
+> **注意**：不要用 `west build -t debug`——QEMU 板不支持它。
+> `west debug/flash` 依赖构建生成的 `runners.yaml`，而 `qemu_riscv32` 的
+> `board.cmake` 从不注册可用 runner（Zephyr 的 `qemu` runner 只是占位空壳，
+> 不支持任何命令），执行会报 `FATAL ERROR: no runners.yaml found`。
+> QEMU 板调试就用上面的手动两终端法；`west build -t run` 能用是因为
+> 它由 CMake 直接起 QEMU，不经过 runner 机制。
 
 ---
 
@@ -730,6 +747,7 @@ $GDB $ELF
 | `qemu-system-riscv32: command not found` | 装 `sudo apt-get install qemu-system-misc` |
 | `cannot create PID file: Cannot lock pid file` | 上次 QEMU 没退干净。`pkill -f qemu-system-riscv32` 后删掉输出目录里的 `qemu.pid` |
 | `west build -t run` 一直不返回 | 程序进入 Zephyr 空闲线程，属正常；按 `Ctrl-A` 再 `X` 退出 |
+| `west build -t debug` 报 `FATAL ERROR: no runners.yaml found` | 正常现象：QEMU 板不支持 west flash/debug（`qemu` runner 是占位空壳）。调试用 [6.2 节](#62-用-gdb-单步调试)的手动两终端法 |
 | 提示找不到 `ZEPHYR_BASE` / 板子 | 未激活 venv，或不在 `zephyrproject` 目录下执行 |
 | 改了 `.S` 不重新编译 | 加 `-p always` 强制重建：`west build ... -p always` |
 | 想换成 64 位 RISC-V | 把 `-b qemu_riscv32` 换成 `-b qemu_riscv64`，并相应使用 64 位寄存器（`a0` 等仍是 64 位宽） |
