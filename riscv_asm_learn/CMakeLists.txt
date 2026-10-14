@@ -15,3 +15,9 @@ target_sources(app PRIVATE
 # Zephyr 自己的 linker.ld 显式放置了 .riscv.attributes，实际链接不会踩这个坑。
 # 故在此直接注入裸旗标，绕过能力检查，让孤儿段在链接期就报 error。
 zephyr_link_libraries(-Wl,--orphan-handling=error)
+
+# CONFIG_OUTPUT_DISASSEMBLY=y（见 prj.conf）让每次链接后自动生成 zephyr.lst，
+# 默认命令是 objdump -d -S。此处给 bintools 的反汇编旗标追加 -h：
+# .lst 顶部先打印 ELF 段表（rom_start/text/datas/bss 等段的 Size/VMA/LMA/标志），
+# 往下才是反汇编正文，一份文件同时看清"段级内存分布"与"指令编码"。
+set_property(TARGET bintools PROPERTY disassembly_flag -d -h)
