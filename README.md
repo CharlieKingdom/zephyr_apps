@@ -5,8 +5,8 @@
 
 ## 环境
 
-- Zephyr v4.1.0，工作区 `west` 位于 `/home/ubuntu/workspace/zephyrproject`
-- Zephyr SDK 0.17.0
+- Zephyr v4.4.2，工作区 `west` 位于 `/home/ubuntu/workspace/zephyrproject`
+- Zephyr SDK 1.0.1（`/opt/zephyr-sdk-1.0.1`，已写入 `~/.bashrc` 的 `ZEPHYR_SDK_INSTALL_DIR`）
 - 该仓库仅包含应用代码，不含 zephyr/modules 等上游内容
 
 ## 目录结构

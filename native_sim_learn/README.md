@@ -5,7 +5,7 @@
 外设模型，让你在 PC 上就能练习 GPIO、按键中断、EEPROM、随机数等常见外设的写法。
 
 - 目标板：`native_sim`（PC 本机仿真，无需 QEMU、无需硬件）
-- Zephyr：v4.1.0
+- Zephyr：v4.4.2
 - 演示外设：GPIO 输出(LED)、GPIO 输入+中断(按键)、EEPROM、熵源(RNG)
 
 ---
@@ -46,8 +46,8 @@ Zephyr 的 `native_sim` 板属于 **POSIX 架构**：它不模拟某一颗具体
 | `gpio0` | `zephyr,gpio-emul` | 可被程序读写的 GPIO 仿真控制器 |
 | `led0` | `gpio-leds` | 挂在 `gpio0 pin0` 上的 LED |
 | `eeprom0` | `zephyr,sim-eeprom` | EEPROM 仿真，数据落盘到 `eeprom.bin` |
-| `rng` | `zephyr,native-posix-rng` | 熵源（基于宿主机随机数） |
-| `uart0` | `zephyr,native-posix-uart` | 串口控制台 |
+| `rng` | `zephyr,native-sim-rng` | 熵源（基于宿主机随机数） |
+| `uart0` | `zephyr,native-pty-uart` | 串口控制台（基于 pty） |
 | `flash0` | `zephyr,sim-flash` | Flash 仿真，落盘到 `flash.bin` |
 
 ---
@@ -129,7 +129,7 @@ cd /home/ubuntu/workspace/zephyrproject
 
 ```
 WARNING: Using a test - not safe - entropy source
-*** Booting Zephyr OS build v4.1.0 ***
+*** Booting Zephyr OS build v4.4.2 ***
 
 =================================================
  Zephyr native_sim 外设学习示例

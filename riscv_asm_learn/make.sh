@@ -11,7 +11,8 @@ if [ -f .venv/bin/activate ]; then
   # shellcheck disable=SC1091
   source .venv/bin/activate
 fi
-export ZEPHYR_TOOLCHAIN_VARIANT=zephyr
+# Zephyr 4.4 要求 SDK >= 1.0.0。本机已安装 Zephyr SDK 1.0.1 于 /opt
+export ZEPHYR_TOOLCHAIN_VARIANT=zephyr ZEPHYR_SDK_INSTALL_DIR=/opt/zephyr-sdk-1.0.1
 
 # 编译本 app，输出到 build/build_qemu_riscv32_asm
 # -p always：每次先清空 build 目录再全量重编（无视文件是否改动）

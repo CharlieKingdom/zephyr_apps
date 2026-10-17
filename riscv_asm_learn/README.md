@@ -8,10 +8,10 @@
 | --- | --- |
 | 文档标题 | RISC-V 32 位汇编学习程序技术文档 |
 | 文档编号 | RVASM-DOC-001 |
-| 版本 | 2.0 |
+| 版本 | 3.0 |
 | 修订日期 | 2026-10-15 |
 | 文档状态 | 已发布 |
-| 适用软件版本 | Zephyr RTOS v4.1.0 |
+| 适用软件版本 | Zephyr RTOS v4.4.2 |
 | 适用目标板 | qemu_riscv32 |
 
 ### 0.2 修订记录
@@ -20,6 +20,7 @@
 | --- | --- | --- |
 | 1.0 | 2026-10-13 | 初版 |
 | 2.0 | 2026-10-15 | 按 ASD-STE100 规范重构文档结构与语言 |
+| 3.0 | 2026-10-15 | 升级至 Zephyr 4.4.2 与 Zephyr SDK 1.0.1，同步更新版本引用与工具路径 |
 
 ### 0.3 信息等级定义
 
@@ -129,7 +130,7 @@
 | --- | --- |
 | 操作系统 | Ubuntu（x86_64） |
 | 工作区路径 | `/home/ubuntu/workspace/zephyrproject` |
-| Zephyr 工具链 | Zephyr SDK 0.17.0 |
+| Zephyr 工具链 | Zephyr SDK 1.0.1（位于 `/opt/zephyr-sdk-1.0.1`） |
 | 构建工具 | west 1.5.0、CMake、Ninja |
 | 模拟器 | qemu-system-riscv32 |
 
@@ -147,10 +148,10 @@
 | 编号 | 资料 | 说明 |
 | --- | --- | --- |
 | R1 | [RISC-V 指令集官方手册](https://github.com/riscv/riscv-isa-manual) | 全部指令的定义。RV32I 指令一页可查。伪指令清单见卷一附录 A |
-| R2 | [Zephyr 上游 arch/riscv](https://github.com/zephyrproject-rtos/zephyr/tree/v4.1.0/arch/riscv) | 内核 RISC-V 启动与上下文切换源码（[reset.S](../../zephyr/arch/riscv/core/reset.S)、[switch.S](../../zephyr/arch/riscv/core/switch.S)） |
+| R2 | [arch/riscv](../../zephyr/arch/riscv)（本地工作区，同上游 v4.4.2） | 内核 RISC-V 启动与上下文切换源码（[reset.S](../../zephyr/arch/riscv/core/reset.S)、[switch.S](../../zephyr/arch/riscv/core/switch.S)） |
 | R3 | [linker.ld](../../zephyr/include/zephyr/arch/riscv/common/linker.ld) | RISC-V 链接脚本（本地工作区） |
 | R4 | [sections.h](../../zephyr/include/zephyr/linker/sections.h) | 输出段名宏定义（本地工作区） |
-| R5 | [board.cmake](../../zephyr/boards/qemu/riscv32/board.cmake) | 目标板 QEMU 参数（本地工作区，上游 v4.1.0 同路径） |
+| R5 | [board.cmake](../../zephyr/boards/qemu/riscv32/board.cmake) | 目标板 QEMU 参数（本地工作区，上游 v4.4.2 同路径） |
 | R6 | [asm_funcs.S](src/asm_funcs.S) | 5 个汇编函数源码 |
 | R7 | [main.c](src/main.c) | C 侧调用源码 |
 
@@ -245,7 +246,7 @@ sudo apt-get install -y qemu-system-misc
 流程如下：
 
 1. `qemu_riscv32.yaml` 声明 `arch: riscv`；
-2. Zephyr 载入 [arch/riscv](https://github.com/zephyrproject-rtos/zephyr/tree/v4.1.0/arch/riscv)（R2）；
+2. Zephyr 载入 [arch/riscv](../../zephyr/arch/riscv)（R2）；
 3. Zephyr 使用 RISC-V 架构的启动代码。启动代码包括 `reset.S`、trap 处理、`switch.S` 上下文切换。
 
 ### 5.3 内存与设备配置
@@ -286,7 +287,7 @@ grep -o 'mabi=[^ ]*'  build/build_qemu_riscv32_asm/compile_commands.json | head 
 
 ### 5.5 QEMU 启动参数
 
-[board.cmake](https://github.com/zephyrproject-rtos/zephyr/blob/v4.1.0/boards/qemu/riscv32/board.cmake)（R5）定义以下参数：
+[board.cmake](../../zephyr/boards/qemu/riscv32/board.cmake)（R5）定义以下参数：
 
 ```cmake
 set(QEMU_binary_suffix riscv32)          # → 使用 qemu-system-riscv32
@@ -354,7 +355,8 @@ if [ -f .venv/bin/activate ]; then
   # shellcheck disable=SC1091
   source .venv/bin/activate
 fi
-export ZEPHYR_TOOLCHAIN_VARIANT=zephyr
+# Zephyr 4.4 要求 SDK >= 1.0.0。本机已安装 Zephyr SDK 1.0.1 于 /opt
+export ZEPHYR_TOOLCHAIN_VARIANT=zephyr ZEPHYR_SDK_INSTALL_DIR=/opt/zephyr-sdk-1.0.1
 
 # 编译本 app，输出到 build/build_qemu_riscv32_asm
 # -p always：每次先清空 build 目录再全量重编（无视文件是否改动）
@@ -368,7 +370,7 @@ west build -p always -b qemu_riscv32 apps/riscv_asm_learn -d build/build_qemu_ri
 | `set -euo pipefail` | 出错即停。任一命令失败、引用未定义变量、管道中任一段失败时，脚本立即退出 |
 | `cd "$(dirname "$(readlink -f "$0")")/../.."` | 定位脚本自身路径，再切换到工作区根目录。因此从任何目录调用脚本，相对路径均有效 |
 | `source .venv/bin/activate` | 激活虚拟环境。保证非交互执行（如 IDE 任务）也能找到 `west` 与 SDK |
-| `export ZEPHYR_TOOLCHAIN_VARIANT=zephyr` | 指定使用 Zephyr SDK 工具链 |
+| `export ZEPHYR_TOOLCHAIN_VARIANT=zephyr ZEPHYR_SDK_INSTALL_DIR=/opt/zephyr-sdk-1.0.1` | 指定使用 Zephyr SDK 工具链（含 SDK 1.0.1 路径） |
 | `west build ...` | 执行构建。参数见 6.3 节 |
 
 ### 6.3 构建命令参数
@@ -471,7 +473,7 @@ west build -d build/build_qemu_riscv32_asm -t run
 3. 确认输出。期望输出如下：
 
 ```
-*** Booting Zephyr OS build v4.1.0 ***
+*** Booting Zephyr OS build v4.4.2 ***
 === RISC-V RV32 汇编学习示例 ===
 asm_add(12, 5)       = 17
 asm_sub(12, 5)       = 7
@@ -489,7 +491,7 @@ asm_factorial(6)     = 720
 
 ```bash
 cd /home/ubuntu/workspace/zephyrproject
-QEMU=$HOME/zephyr-sdk-0.17.0/sysroots/x86_64-pokysdk-linux/usr/bin/qemu-system-riscv32
+QEMU=/opt/zephyr-sdk-1.0.1/hosttools/sysroots/x86_64-pokysdk-linux/usr/bin/qemu-system-riscv32
 ELF=build/build_qemu_riscv32_asm/zephyr/zephyr.elf
 ```
 
@@ -635,7 +637,7 @@ Idx Name          Size      VMA       LMA       File off  Algn
 只查看段表或只查看单个函数时，手动命令更快捷。
 
 ```bash
-OBJDUMP=$HOME/zephyr-sdk-0.17.0/riscv64-zephyr-elf/bin/riscv64-zephyr-elf-objdump
+OBJDUMP=/opt/zephyr-sdk-1.0.1/gnu/riscv64-zephyr-elf/bin/riscv64-zephyr-elf-objdump
 ELF=$HOME/workspace/zephyrproject/build/build_qemu_riscv32_asm/zephyr/zephyr.elf
 
 $OBJDUMP -h $ELF                              # 只查看段表
@@ -675,7 +677,7 @@ $OBJDUMP -d --disassemble=asm_factorial $ELF  # 只查看指定函数（配合 1
 1. 定义变量并启动 QEMU：
 
 ```bash
-QEMU=$HOME/zephyr-sdk-0.17.0/sysroots/x86_64-pokysdk-linux/usr/bin/qemu-system-riscv32
+QEMU=/opt/zephyr-sdk-1.0.1/hosttools/sysroots/x86_64-pokysdk-linux/usr/bin/qemu-system-riscv32
 ELF=$HOME/workspace/zephyrproject/build/build_qemu_riscv32_asm/zephyr/zephyr.elf
 $QEMU -nographic -machine virt -bios none -m 256 -s -S -kernel $ELF
 ```
@@ -689,7 +691,7 @@ $QEMU -nographic -machine virt -bios none -m 256 -s -S -kernel $ELF
 1. 启动 GDB 并加载符号表：
 
 ```bash
-GDB=$HOME/zephyr-sdk-0.17.0/riscv64-zephyr-elf/bin/riscv64-zephyr-elf-gdb
+GDB=/opt/zephyr-sdk-1.0.1/gnu/riscv64-zephyr-elf/bin/riscv64-zephyr-elf-gdb
 ELF=$HOME/workspace/zephyrproject/build/build_qemu_riscv32_asm/zephyr/zephyr.elf
 $GDB $ELF
 ```
